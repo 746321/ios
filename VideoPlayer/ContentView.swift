@@ -17,7 +17,7 @@ struct ContentView: View {
 
             if let player = player {
                 FullscreenVideoView(player: player)
-                    .ignoresSafeArea(.all) // 强制越过刘海屏和底部黑条，全屏铺满
+                    .ignoresSafeArea(.all)
                     .onLongPressGesture {
                         showPicker = true
                     }
@@ -40,6 +40,7 @@ struct ContentView: View {
                 }
             }
         }
+        .statusBar(hidden: true) // 强制隐藏 iOS 顶部状态栏
         .onAppear {
             checkAndPlaySavedVideo()
         }
@@ -82,7 +83,6 @@ struct ContentView: View {
     }
 }
 
-// 强制图层自适应当前设备尺寸，消除黑边
 struct FullscreenVideoView: UIViewRepresentable {
     let player: AVPlayer
 
@@ -108,7 +108,7 @@ class PlayerUIView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        playerLayer.frame = bounds // 保证在横竖屏和全面屏下视频完全贴合边界
+        playerLayer.frame = bounds
     }
 }
 

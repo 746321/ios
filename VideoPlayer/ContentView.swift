@@ -5,6 +5,7 @@ import PhotosUI
 struct ContentView: View {
     @State private var player: AVPlayer?
     @State private var showPicker = false
+    @Environment(\.scenePhase) private var scenePhase
 
     private var savedVideoURL: URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -44,6 +45,13 @@ struct ContentView: View {
         .onAppear {
             checkAndPlaySavedVideo()
         }
+        // 监听应用切回前台/重新打开，强制归零并重新播放
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active, let player = player {
+                player.seek(to: .zero)
+                player.play()
+            }
+        }
         .sheet(isPresented: $showPicker) {
             VideoPicker { selectedURL in
                 saveAndPlayVideo(from: selectedURL)
@@ -79,11 +87,11 @@ struct ContentView: View {
         }
 
         self.player = newPlayer
+        newPlayer.seek(to: .zero)
         newPlayer.play()
     }
 }
 
-// 智能判断视频宽高比，横屏视频自动旋转 90 度适应竖屏
 struct FullscreenVideoView: UIViewRepresentable {
     let player: AVPlayer
 
@@ -128,12 +136,10 @@ class PlayerUIView: UIView {
             let isLandscape = abs(size.width) > abs(size.height)
 
             if isLandscape {
-                // 横屏视频：旋转 90 度旋转并适应全面屏
                 playerLayer.transform = CATransform3DMakeRotation(.pi / 2, 0, 0, 1)
                 playerLayer.bounds = CGRect(x: 0, y: 0, width: bounds.height, height: bounds.width)
                 playerLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
             } else {
-                // 竖屏视频：直接全屏铺满
                 playerLayer.transform = CATransform3DIdentity
                 playerLayer.frame = bounds
             }

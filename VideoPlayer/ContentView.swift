@@ -78,7 +78,7 @@ final class VideoPlayerModel: ObservableObject {
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
 
         do {
-            let bookmark = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+            let bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
             UserDefaults.standard.set(bookmark, forKey: bookmarkKey)
         } catch {
             // Some local URLs don't support security-scoped bookmarks; playback still works.
@@ -105,9 +105,9 @@ final class VideoPlayerModel: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: bookmarkKey) else { return }
         var stale = false
         do {
-            let url = try URL(resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale)
+            let url = try URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
             if stale {
-                let refreshed = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+                let refreshed = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
                 UserDefaults.standard.set(refreshed, forKey: bookmarkKey)
             }
             if url.startAccessingSecurityScopedResource() {

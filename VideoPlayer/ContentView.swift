@@ -6,7 +6,6 @@ struct ContentView: View {
     @State private var player: AVPlayer?
     @State private var showPicker = false
 
-    // 获取持久化保存视频的本地路径
     private var savedVideoURL: URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return paths[0].appendingPathComponent("saved_video.mp4")
@@ -17,9 +16,8 @@ struct ContentView: View {
             Color.black.ignoresSafeArea()
 
             if let player = player {
-                // 纯净全屏播放组件（长按屏幕可重新选择视频）
                 FullscreenVideoView(player: player)
-                    .ignoresSafeArea()
+                    .ignoresSafeArea(.all) // 强制越过刘海屏和底部黑条，全屏铺满
                     .onLongPressGesture {
                         showPicker = true
                     }
@@ -52,7 +50,6 @@ struct ContentView: View {
         }
     }
 
-    // 检查本地是否有历史视频，有则直接播放，无则弹出选择器
     private func checkAndPlaySavedVideo() {
         if FileManager.default.fileExists(atPath: savedVideoURL.path) {
             startLoopingPlayer(url: savedVideoURL)
@@ -61,14 +58,12 @@ struct ContentView: View {
         }
     }
 
-    // 将选择的视频保存到本地沙盒
     private func saveAndPlayVideo(from sourceURL: URL) {
         try? FileManager.default.removeItem(at: savedVideoURL)
         try? FileManager.default.copyItem(at: sourceURL, to: savedVideoURL)
         startLoopingPlayer(url: savedVideoURL)
     }
 
-    // 初始化播放器并绑定自动循环播放事件
     private func startLoopingPlayer(url: URL) {
         let item = AVPlayerItem(url: url)
         let newPlayer = AVPlayer(playerItem: item)
@@ -87,14 +82,14 @@ struct ContentView: View {
     }
 }
 
-// 强制铺满屏幕无黑边的 AVPlayerLayer 封装组件
+// 强制图层自适应当前设备尺寸，消除黑边
 struct FullscreenVideoView: UIViewRepresentable {
     let player: AVPlayer
 
     func makeUIView(context: Context) -> PlayerUIView {
         let view = PlayerUIView()
         view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspectFill // 铺满整个屏幕，去除黑边
+        view.playerLayer.videoGravity = .resizeAspectFill
         return view
     }
 
@@ -110,9 +105,13 @@ class PlayerUIView: UIView {
     var playerLayer: AVPlayerLayer {
         return layer as! AVPlayerLayer
     }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        playerLayer.frame = bounds // 保证在横竖屏和全面屏下视频完全贴合边界
+    }
 }
 
-// iOS 相册视频选择器
 struct VideoPicker: UIViewControllerRepresentable {
     var onSelect: (URL) -> Void
 

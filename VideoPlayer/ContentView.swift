@@ -40,7 +40,7 @@ struct ContentView: View {
                 }
             }
         }
-        .statusBar(hidden: true) // 强制隐藏 iOS 顶部状态栏
+        .statusBar(hidden: true)
         .onAppear {
             checkAndPlaySavedVideo()
         }
@@ -83,32 +83,64 @@ struct ContentView: View {
     }
 }
 
+// 智能判断视频宽高比，横屏视频自动旋转 90 度适应竖屏
 struct FullscreenVideoView: UIViewRepresentable {
     let player: AVPlayer
 
     func makeUIView(context: Context) -> PlayerUIView {
         let view = PlayerUIView()
-        view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspectFill
+        view.setPlayer(player)
         return view
     }
 
     func updateUIView(_ uiView: PlayerUIView, context: Context) {
-        uiView.playerLayer.player = player
+        uiView.setPlayer(player)
     }
 }
 
 class PlayerUIView: UIView {
-    override class var layerClass: AnyClass {
-        return AVPlayerLayer.self
+    private let playerLayer = AVPlayerLayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        layer.addSublayer(playerLayer)
+        playerLayer.videoGravity = .resizeAspectFill
     }
-    var playerLayer: AVPlayerLayer {
-        return layer as! AVPlayerLayer
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        layer.addSublayer(playerLayer)
+        playerLayer.videoGravity = .resizeAspectFill
+    }
+
+    func setPlayer(_ player: AVPlayer) {
+        playerLayer.player = player
+        setNeedsLayout()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        playerLayer.frame = bounds
+        guard bounds.width > 0 && bounds.height > 0 else { return }
+
+        if let item = playerLayer.player?.currentItem,
+           let track = item.asset.tracks(withMediaType: .video).first {
+            let size = track.naturalSize.applying(track.preferredTransform)
+            let isLandscape = abs(size.width) > abs(size.height)
+
+            if isLandscape {
+                // 横屏视频：旋转 90 度旋转并适应全面屏
+                playerLayer.transform = CATransform3DMakeRotation(.pi / 2, 0, 0, 1)
+                playerLayer.bounds = CGRect(x: 0, y: 0, width: bounds.height, height: bounds.width)
+                playerLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            } else {
+                // 竖屏视频：直接全屏铺满
+                playerLayer.transform = CATransform3DIdentity
+                playerLayer.frame = bounds
+            }
+        } else {
+            playerLayer.transform = CATransform3DIdentity
+            playerLayer.frame = bounds
+        }
     }
 }
 

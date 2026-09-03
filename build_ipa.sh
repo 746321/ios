@@ -13,7 +13,7 @@ swiftc -target arm64-apple-ios15.0 \
   -o build/Payload/VideoPlayer.app/VideoPlayer \
   VideoPlayer/VideoPlayerApp.swift VideoPlayer/ContentView.swift
 
-# 2. 注入 Info.plist（关键：加上 UILaunchScreen 触发全屏全面屏适配）
+# 2. 注入 Info.plist（包含全屏、无黑边及强制隐藏状态栏属性）
 cat << 'EOF' > build/Payload/VideoPlayer.app/Info.plist
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -43,6 +43,10 @@ cat << 'EOF' > build/Payload/VideoPlayer.app/Info.plist
     <true/>
     <key>UILaunchScreen</key>
     <dict/>
+    <key>UIStatusBarHidden</key>
+    <true/>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <false/>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>需要访问相册选择视频播放</string>
     <key>UISupportedInterfaceOrientations</key>
@@ -55,10 +59,9 @@ cat << 'EOF' > build/Payload/VideoPlayer.app/Info.plist
 </plist>
 EOF
 
-# 3. 设置权限并打包 IPA
+# 3. 设置执行权限并打包 IPA
 chmod +x build/Payload/VideoPlayer.app/VideoPlayer
 chmod -R 755 build/Payload/VideoPlayer.app
 
 cd build
 zip -q -r -y ../output/VideoPlayer.ipa Payload
-

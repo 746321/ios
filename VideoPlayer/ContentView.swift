@@ -3,7 +3,8 @@ import AVKit
 import PhotosUI
 
 struct ContentView: View {
-    @State private var player: AVPlayer?
+    @State private var player: AVQueuePlayer?
+    @State private var looper: AVPlayerLooper?
     @State private var showPicker = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -45,11 +46,12 @@ struct ContentView: View {
         .onAppear {
             checkAndPlaySavedVideo()
         }
-        // 监听应用切回前台/重新打开，强制归零并重新播放
         .onChange(of: scenePhase) { newPhase in
-            if newPhase == .active, let player = player {
-                player.seek(to: .zero)
-                player.play()
+            if newPhase == .active {
+                player?.seek(to: .zero)
+                player?.play()
+            } else if newPhase == .background {
+                player?.pause()
             }
         }
         .sheet(isPresented: $showPicker) {
@@ -74,21 +76,21 @@ struct ContentView: View {
     }
 
     private func startLoopingPlayer(url: URL) {
+        // 1. 彻底清理旧播放器与循环器，防止音频后台重画叠加
+        player?.pause()
+        player = nil
+        looper = nil
+
+        // 2. 使用 iOS 原生 Looper 构建无缝干净循环
         let item = AVPlayerItem(url: url)
-        let newPlayer = AVPlayer(playerItem: item)
+        let queuePlayer = AVQueuePlayer(playerItem: item)
+        let playerLooper = AVPlayerLooper(player: queuePlayer, templateItem: item)
 
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
-            queue: .main
-        ) { _ in
-            newPlayer.seek(to: .zero)
-            newPlayer.play()
-        }
+        self.looper = playerLooper
+        self.player = queuePlayer
 
-        self.player = newPlayer
-        newPlayer.seek(to: .zero)
-        newPlayer.play()
+        queuePlayer.seek(to: .zero)
+        queuePlayer.play()
     }
 }
 

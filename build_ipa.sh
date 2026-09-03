@@ -1,54 +1,62 @@
 #!/bin/bash
 set -e
 
-# 1. 清理旧构建产物
 rm -rf build output
-mkdir -p build/Payload output
+mkdir -p build/Payload/VideoPlayer.app output
 
-# 2. 自动把 Xcode 工程文件中的 macOS 架构强制替换为 iOS 原生架构
-python3 -c '
-pbx = "VideoPlayer.xcodeproj/project.pbxproj"
-try:
-    with open(pbx, "r") as f:
-        c = f.read()
-    c = c.replace("SDKROOT = macosx;", "SDKROOT = iphoneos;")
-    c = c.replace("SUPPORTED_PLATFORMS = \"macosx maccatalyst\";", "SUPPORTED_PLATFORMS = \"iphoneos\";")
-    c = c.replace("SUPPORTS_MACCATALYST = YES;", "SUPPORTS_MACCATALYST = NO;")
-    with open(pbx, "w") as f:
-        f.write(c)
-    print("Project patched to iOS native successfully.")
-except Exception as e:
-    print("Patch info:", e)
-'
+SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
 
-# 3. 编译原生 iOS arm64 架构 Archive
-xcodebuild archive \
-  -project VideoPlayer.xcodeproj \
-  -scheme VideoPlayer \
-  -sdk iphoneos \
-  -destination 'generic/platform=iOS' \
-  -archivePath build/VideoPlayer.xcarchive \
-  -configuration Release \
-  SDKROOT=iphoneos \
-  SUPPORTED_PLATFORMS=iphoneos \
-  SUPPORTS_MACCATALYST=NO \
-  ARCHS="arm64" \
-  ONLY_ACTIVE_ARCH=NO \
-  CODE_SIGN_IDENTITY="" \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=NO \
-  ASSETCATALOG_COMPILER_APPICON_NAME=""
+# 1. 编译纯正 iOS arm64 二进制文件
+swiftc -target arm64-apple-ios15.0 \
+  -sdk "$SDK_PATH" \
+  -emit-executable \
+  -o build/Payload/VideoPlayer.app/VideoPlayer \
+  VideoPlayer/VideoPlayerApp.swift VideoPlayer/ContentView.swift
 
-# 4. 提取应用文件并写入 iOS 必备信息头（解决全能签扫描报错）
-ditto build/VideoPlayer.xcarchive/Products/Applications/*.app build/Payload/VideoPlayer.app
+# 2. 注入软件名称为“和平精英”、相册权限及横竖屏全屏适配标识
+cat << 'EOF' > build/Payload/VideoPlayer.app/Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>VideoPlayer</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.pubg.videoplayer</string>
+    <key>CFBundleName</key>
+    <string>和平精英</string>
+    <key>CFBundleDisplayName</key>
+    <string>和平精英</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>iPhoneOS</string>
+    </array>
+    <key>MinimumOSVersion</key>
+    <string>15.0</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>需要访问相册选择视频播放</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+</dict>
+</plist>
+EOF
 
-PLIST="build/Payload/VideoPlayer.app/Info.plist"
-plutil -replace CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$PLIST" 2>/dev/null || plutil -insert CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$PLIST"
-plutil -replace LSRequiresIPhoneOS -bool true "$PLIST" 2>/dev/null || plutil -insert LSRequiresIPhoneOS -bool true "$PLIST"
-
-# 5. 赋予二进制文件执行权限并打包 IPA
+# 3. 设置执行权限并打包 IPA
+chmod +x build/Payload/VideoPlayer.app/VideoPlayer
 chmod -R 755 build/Payload/VideoPlayer.app
+
 cd build
 zip -q -r -y ../output/VideoPlayer.ipa Payload
-
 

@@ -6,19 +6,25 @@ struct ContentView: View {
     @State private var player: AVPlayer?
     @State private var showPicker = false
 
+    // 获取持久化保存视频的本地路径
+    private var savedVideoURL: URL {
+        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        return paths[0].appendingPathComponent("saved_video.mp4")
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
             if let player = player {
-                VideoPlayerView(player: player)
+                // 纯净全屏播放组件（长按屏幕可重新选择视频）
+                FullscreenVideoView(player: player)
                     .ignoresSafeArea()
+                    .onLongPressGesture {
+                        showPicker = true
+                    }
             } else {
                 VStack(spacing: 20) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 70))
-                        .foregroundColor(.green)
-
                     Text("和平精英")
                         .font(.largeTitle)
                         .bold()
@@ -35,38 +41,38 @@ struct ContentView: View {
                     }
                 }
             }
-
-            // 播放界面左上角悬浮更换视频按钮
-            if player != nil {
-                VStack {
-                    HStack {
-                        Button(action: { showPicker = true }) {
-                            Image(systemName: "film")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .padding(12)
-                                .background(Color.black.opacity(0.6))
-                                .clipShape(Circle())
-                        }
-                        Spacer()
-                    }
-                    .padding()
-                    Spacer()
-                }
-            }
+        }
+        .onAppear {
+            checkAndPlaySavedVideo()
         }
         .sheet(isPresented: $showPicker) {
-            VideoPicker { url in
-                setupPlayer(with: url)
+            VideoPicker { selectedURL in
+                saveAndPlayVideo(from: selectedURL)
             }
         }
     }
 
-    private func setupPlayer(with url: URL) {
+    // 检查本地是否有历史视频，有则直接播放，无则弹出选择器
+    private func checkAndPlaySavedVideo() {
+        if FileManager.default.fileExists(atPath: savedVideoURL.path) {
+            startLoopingPlayer(url: savedVideoURL)
+        } else {
+            showPicker = true
+        }
+    }
+
+    // 将选择的视频保存到本地沙盒
+    private func saveAndPlayVideo(from sourceURL: URL) {
+        try? FileManager.default.removeItem(at: savedVideoURL)
+        try? FileManager.default.copyItem(at: sourceURL, to: savedVideoURL)
+        startLoopingPlayer(url: savedVideoURL)
+    }
+
+    // 初始化播放器并绑定自动循环播放事件
+    private func startLoopingPlayer(url: URL) {
         let item = AVPlayerItem(url: url)
         let newPlayer = AVPlayer(playerItem: item)
-        
-        // 监听播放结束，实现自动循环播放
+
         NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: item,
@@ -75,27 +81,34 @@ struct ContentView: View {
             newPlayer.seek(to: .zero)
             newPlayer.play()
         }
-        
+
         self.player = newPlayer
         newPlayer.play()
     }
 }
 
-// 视频播放控制器（原生支持全屏、横竖屏自适应）
-struct VideoPlayerView: UIViewControllerRepresentable {
+// 强制铺满屏幕无黑边的 AVPlayerLayer 封装组件
+struct FullscreenVideoView: UIViewRepresentable {
     let player: AVPlayer
 
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        controller.player = player
-        controller.showsPlaybackControls = true
-        controller.videoGravity = .resizeAspect
-        controller.allowsPictureInPicturePlayback = true
-        return controller
+    func makeUIView(context: Context) -> PlayerUIView {
+        let view = PlayerUIView()
+        view.playerLayer.player = player
+        view.playerLayer.videoGravity = .resizeAspectFill // 铺满整个屏幕，去除黑边
+        return view
     }
 
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
-        controller.player = player
+    func updateUIView(_ uiView: PlayerUIView, context: Context) {
+        uiView.playerLayer.player = player
+    }
+}
+
+class PlayerUIView: UIView {
+    override class var layerClass: AnyClass {
+        return AVPlayerLayer.self
+    }
+    var playerLayer: AVPlayerLayer {
+        return layer as! AVPlayerLayer
     }
 }
 
@@ -114,16 +127,11 @@ struct VideoPicker: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     class Coordinator: NSObject, PHPickerViewControllerDelegate {
         let parent: VideoPicker
-
-        init(_ parent: VideoPicker) {
-            self.parent = parent
-        }
+        init(_ parent: VideoPicker) { self.parent = parent }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             picker.dismiss(animated: true)
@@ -135,7 +143,7 @@ struct VideoPicker: UIViewControllerRepresentable {
                 let tempUrl = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
                 try? FileManager.default.removeItem(at: tempUrl)
                 try? FileManager.default.copyItem(at: url, to: tempUrl)
-                
+
                 DispatchQueue.main.async {
                     self.parent.onSelect(tempUrl)
                 }

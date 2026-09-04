@@ -76,12 +76,10 @@ struct ContentView: View {
     }
 
     private func startLoopingPlayer(url: URL) {
-        // 1. 彻底清理旧播放器与循环器，防止音频后台重画叠加
         player?.pause()
         player = nil
         looper = nil
 
-        // 2. 使用 iOS 原生 Looper 构建无缝干净循环
         let item = AVPlayerItem(url: url)
         let queuePlayer = AVQueuePlayer(playerItem: item)
         let playerLooper = AVPlayerLooper(player: queuePlayer, templateItem: item)
@@ -110,21 +108,38 @@ struct FullscreenVideoView: UIViewRepresentable {
 
 class PlayerUIView: UIView {
     private let playerLayer = AVPlayerLayer()
+    private var sizeObserver: NSKeyValueObservation?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        layer.addSublayer(playerLayer)
-        playerLayer.videoGravity = .resizeAspectFill
+        setupView()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
+        setupView()
+    }
+
+    private func setupView() {
+        self.clipsToBounds = true
+        playerLayer.masksToBounds = true
+        // 关键改动：将填充模式设为 .resize（挤压/拉伸填充，完全不裁剪）
+        playerLayer.videoGravity = .resize
         layer.addSublayer(playerLayer)
-        playerLayer.videoGravity = .resizeAspectFill
     }
 
     func setPlayer(_ player: AVPlayer) {
         playerLayer.player = player
+
+        sizeObserver?.invalidate()
+        if let currentItem = player.currentItem {
+            sizeObserver = currentItem.observe(\.presentationSize, options: [.new, .initial]) { [weak self] _, _ in
+                DispatchQueue.main.async {
+                    self?.setNeedsLayout()
+                    self?.layoutIfNeeded()
+                }
+            }
+        }
         setNeedsLayout()
     }
 
@@ -132,23 +147,29 @@ class PlayerUIView: UIView {
         super.layoutSubviews()
         guard bounds.width > 0 && bounds.height > 0 else { return }
 
-        if let item = playerLayer.player?.currentItem,
-           let track = item.asset.tracks(withMediaType: .video).first {
-            let size = track.naturalSize.applying(track.preferredTransform)
-            let isLandscape = abs(size.width) > abs(size.height)
-
-            if isLandscape {
-                playerLayer.transform = CATransform3DMakeRotation(.pi / 2, 0, 0, 1)
-                playerLayer.bounds = CGRect(x: 0, y: 0, width: bounds.height, height: bounds.width)
-                playerLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
-            } else {
-                playerLayer.transform = CATransform3DIdentity
-                playerLayer.frame = bounds
+        var isLandscape = false
+        if let item = playerLayer.player?.currentItem {
+            let presentationSize = item.presentationSize
+            if presentationSize.width > 0 && presentationSize.height > 0 {
+                isLandscape = presentationSize.width > presentationSize.height
+            } else if let track = item.asset.tracks(withMediaType: .video).first {
+                let size = track.naturalSize.applying(track.preferredTransform)
+                isLandscape = abs(size.width) > abs(size.height)
             }
+        }
+
+        if isLandscape {
+            playerLayer.transform = CATransform3DMakeRotation(.pi / 2, 0, 0, 1)
+            playerLayer.bounds = CGRect(x: 0, y: 0, width: bounds.height, height: bounds.width)
+            playerLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
         } else {
             playerLayer.transform = CATransform3DIdentity
             playerLayer.frame = bounds
         }
+    }
+
+    deinit {
+        sizeObserver?.invalidate()
     }
 }
 

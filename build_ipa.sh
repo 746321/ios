@@ -6,14 +6,14 @@ mkdir -p build/Payload/VideoPlayer.app output
 
 SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
 
-# 1. 编译 iOS arm64 二进制文件
-swiftc -target arm64-apple-ios15.0 \
+# 1. 编译 iOS arm64 二进制文件（向下兼容至 iOS 14.0）
+swiftc -target arm64-apple-ios14.0 \
   -sdk "$SDK_PATH" \
   -emit-executable \
   -o build/Payload/VideoPlayer.app/VideoPlayer \
   VideoPlayer/VideoPlayerApp.swift VideoPlayer/ContentView.swift
 
-# 2. 注入 Info.plist（包含全屏、无黑边及强制隐藏状态栏属性）
+# 2. 注入 Info.plist（MinimumOSVersion 改为 14.0）
 cat << 'EOF' > build/Payload/VideoPlayer.app/Info.plist
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -38,7 +38,7 @@ cat << 'EOF' > build/Payload/VideoPlayer.app/Info.plist
         <string>iPhoneOS</string>
     </array>
     <key>MinimumOSVersion</key>
-    <string>15.0</string>
+    <string>14.0</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UILaunchScreen</key>
@@ -65,3 +65,4 @@ chmod -R 755 build/Payload/VideoPlayer.app
 
 cd build
 zip -q -r -y ../output/VideoPlayer.ipa Payload
+
